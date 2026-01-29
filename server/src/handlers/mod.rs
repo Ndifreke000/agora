@@ -1,23 +1,9 @@
+pub mod health;
+
 use axum::{extract::Path, response::IntoResponse, response::Response};
-use serde::Serialize;
 
 use crate::utils::error::AppError;
-use crate::utils::response::{empty_success, success};
-
-#[derive(Serialize)]
-struct HealthPayload {
-    status: &'static str,
-    service: &'static str,
-}
-
-pub async fn health_check() -> Response {
-    let payload = HealthPayload {
-        status: "ok",
-        service: "agora-api",
-    };
-
-    success(payload, "Health check successful").into_response()
-}
+use crate::utils::response::empty_success;
 
 pub async fn example_validation_error() -> Response {
     AppError::ValidationError("The provided input is invalid".to_string()).into_response()

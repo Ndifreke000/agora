@@ -28,7 +28,7 @@ async fn main() {
 
     tracing::info!("Migrations run successfully");
 
-    let app: Router = create_routes();
+    let app: Router = create_routes(pool.clone());
 
     let addr = SocketAddr::from(([0, 0, 0, 0], 3001));
     tracing::info!("🚀 Server running at http://{}", addr);
