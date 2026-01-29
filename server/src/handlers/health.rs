@@ -55,7 +55,11 @@ pub async fn health_check_db(State(pool): State<PgPool>) -> Response {
                 database: "disconnected",
                 timestamp: Utc::now().to_rfc3339(),
             };
-            (axum::http::StatusCode::SERVICE_UNAVAILABLE, axum::Json(payload)).into_response()
+            (
+                axum::http::StatusCode::SERVICE_UNAVAILABLE,
+                axum::Json(payload),
+            )
+                .into_response()
         }
     }
 }
@@ -86,6 +90,10 @@ pub async fn health_check_ready(State(pool): State<PgPool>) -> Response {
             api: api_status,
             database: db_status,
         };
-        (axum::http::StatusCode::SERVICE_UNAVAILABLE, axum::Json(payload)).into_response()
+        (
+            axum::http::StatusCode::SERVICE_UNAVAILABLE,
+            axum::Json(payload),
+        )
+            .into_response()
     }
 }
