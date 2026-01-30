@@ -1,6 +1,6 @@
 #![no_std]
 
-use crate::events::{EventRegistered, EventStatusUpdated, FeeUpdated};
+use crate::events::{EventRegistered, EventStatusUpdated, FeeUpdated, InitializationEvent};
 use crate::types::{EventInfo, PaymentInfo};
 use soroban_sdk::{contract, contractimpl, Address, Env, String, Vec};
 
@@ -16,20 +16,46 @@ pub struct EventRegistry;
 
 #[contractimpl]
 impl EventRegistry {
-    /// Initializes the contract with an admin address and initial platform fee.
+    /// Initializes the contract configuration. Can only be called once.
+    ///
+    /// # Arguments
+    /// * `admin` - The administrator address.
+    /// * `platform_wallet` - The platform wallet address for fees.
+    /// * `platform_fee_percent` - Initial platform fee in basis points (10000 = 100%).
     pub fn initialize(
         env: Env,
         admin: Address,
+        platform_wallet: Address,
         platform_fee_percent: u32,
     ) -> Result<(), EventRegistryError> {
-        if storage::get_admin(&env).is_some() || storage::has_platform_fee(&env) {
-            return Err(EventRegistryError::EventAlreadyExists);
+        if storage::is_initialized(&env) {
+            return Err(EventRegistryError::AlreadyInitialized);
         }
-        if platform_fee_percent > 10000 {
+
+        validate_address(&env, &admin)?;
+        validate_address(&env, &platform_wallet)?;
+
+        let initial_fee = if platform_fee_percent == 0 {
+            500
+        } else {
+            platform_fee_percent
+        };
+
+        if initial_fee > 10000 {
             return Err(EventRegistryError::InvalidFeePercent);
         }
         storage::set_admin(&env, &admin);
-        storage::set_platform_fee(&env, platform_fee_percent);
+        storage::set_platform_wallet(&env, &platform_wallet);
+        storage::set_platform_fee(&env, initial_fee);
+        storage::set_initialized(&env, true);
+
+        InitializationEvent {
+            admin_address: admin,
+            platform_wallet,
+            platform_fee_percent: initial_fee,
+            timestamp: env.ledger().timestamp(),
+        }
+        .publish(&env);
         Ok(())
     }
 
@@ -40,6 +66,9 @@ impl EventRegistry {
         organizer_address: Address,
         payment_address: Address,
     ) -> Result<(), EventRegistryError> {
+        if !storage::is_initialized(&env) {
+            return Err(EventRegistryError::NotInitialized);
+        }
         // Verify organizer signature
         organizer_address.require_auth();
 
@@ -172,6 +201,18 @@ impl EventRegistry {
     pub fn get_admin(env: Env) -> Result<Address, EventRegistryError> {
         storage::get_admin(&env).ok_or(EventRegistryError::NotInitialized)
     }
+
+    /// Returns the current platform wallet address.
+    pub fn get_platform_wallet(env: Env) -> Result<Address, EventRegistryError> {
+        storage::get_platform_wallet(&env).ok_or(EventRegistryError::NotInitialized)
+    }
+}
+
+fn validate_address(env: &Env, address: &Address) -> Result<(), EventRegistryError> {
+    if address == &env.current_contract_address() {
+        return Err(EventRegistryError::InvalidAddress);
+    }
+    Ok(())
 }
 
 #[cfg(test)]

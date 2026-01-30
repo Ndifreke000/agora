@@ -9,11 +9,13 @@ fn test_initialize() {
     let contract_id = env.register(EventRegistry, ());
     let client = EventRegistryClient::new(&env, &contract_id);
     let admin = Address::generate(&env);
+    let platform_wallet = Address::generate(&env);
 
-    client.initialize(&admin, &5);
+    client.initialize(&admin, &platform_wallet, &0);
 
-    assert_eq!(client.get_platform_fee(), 5);
+    assert_eq!(client.get_platform_fee(), 500);
     assert_eq!(client.get_admin(), admin);
+    assert_eq!(client.get_platform_wallet(), platform_wallet);
 }
 
 #[test]
@@ -22,10 +24,11 @@ fn test_double_initialization_fails() {
     let contract_id = env.register(EventRegistry, ());
     let client = EventRegistryClient::new(&env, &contract_id);
     let admin = Address::generate(&env);
+    let platform_wallet = Address::generate(&env);
 
-    client.initialize(&admin, &5);
-    let result = client.try_initialize(&admin, &10);
-    assert_eq!(result, Err(Ok(EventRegistryError::EventAlreadyExists)));
+    client.initialize(&admin, &platform_wallet, &500);
+    let result = client.try_initialize(&admin, &platform_wallet, &1000);
+    assert_eq!(result, Err(Ok(EventRegistryError::AlreadyInitialized)));
 }
 
 #[test]
@@ -34,9 +37,23 @@ fn test_initialization_invalid_fee() {
     let contract_id = env.register(EventRegistry, ());
     let client = EventRegistryClient::new(&env, &contract_id);
     let admin = Address::generate(&env);
+    let platform_wallet = Address::generate(&env);
 
-    let result = client.try_initialize(&admin, &10001);
+    let result = client.try_initialize(&admin, &platform_wallet, &10001);
     assert_eq!(result, Err(Ok(EventRegistryError::InvalidFeePercent)));
+}
+
+#[test]
+fn test_initialization_invalid_address() {
+    let env = Env::default();
+    let contract_id = env.register(EventRegistry, ());
+    let client = EventRegistryClient::new(&env, &contract_id);
+
+    let contract_address = client.address.clone();
+    let platform_wallet = Address::generate(&env);
+
+    let result = client.try_initialize(&contract_address, &platform_wallet, &500);
+    assert_eq!(result, Err(Ok(EventRegistryError::InvalidAddress)));
 }
 
 #[test]
@@ -47,8 +64,9 @@ fn test_set_platform_fee() {
     let contract_id = env.register(EventRegistry, ());
     let client = EventRegistryClient::new(&env, &contract_id);
     let admin = Address::generate(&env);
+    let platform_wallet = Address::generate(&env);
 
-    client.initialize(&admin, &5);
+    client.initialize(&admin, &platform_wallet, &500);
     client.set_platform_fee(&10);
 
     assert_eq!(client.get_platform_fee(), 10);
@@ -62,8 +80,9 @@ fn test_set_platform_fee_invalid() {
     let contract_id = env.register(EventRegistry, ());
     let client = EventRegistryClient::new(&env, &contract_id);
     let admin = Address::generate(&env);
+    let platform_wallet = Address::generate(&env);
 
-    client.initialize(&admin, &5);
+    client.initialize(&admin, &platform_wallet, &500);
     let result = client.try_set_platform_fee(&10001);
     assert_eq!(result, Err(Ok(EventRegistryError::InvalidFeePercent)));
 }
@@ -76,8 +95,9 @@ fn test_set_platform_fee_unauthorized() {
     let contract_id = env.register(EventRegistry, ());
     let client = EventRegistryClient::new(&env, &contract_id);
     let admin = Address::generate(&env);
+    let platform_wallet = Address::generate(&env);
 
-    client.initialize(&admin, &5);
+    client.initialize(&admin, &platform_wallet, &500);
     client.set_platform_fee(&10);
 }
 
@@ -88,7 +108,8 @@ fn test_storage_operations() {
     let client = EventRegistryClient::new(&env, &contract_id);
 
     let admin = Address::generate(&env);
-    client.initialize(&admin, &5);
+    let platform_wallet = Address::generate(&env);
+    client.initialize(&admin, &platform_wallet, &500);
 
     let organizer = Address::generate(&env);
     let payment_address = Address::generate(&env);
@@ -168,9 +189,10 @@ fn test_register_event_success() {
     let admin = Address::generate(&env);
     let organizer = Address::generate(&env);
     let payment_addr = Address::generate(&env);
+    let platform_wallet = Address::generate(&env);
 
     env.mock_all_auths();
-    client.initialize(&admin, &500);
+    client.initialize(&admin, &platform_wallet, &500);
 
     let event_id = String::from_str(&env, "event_001");
     client.register_event(&event_id, &organizer, &payment_addr);
@@ -189,9 +211,10 @@ fn test_register_duplicate_event_fails() {
     let admin = Address::generate(&env);
     let organizer = Address::generate(&env);
     let payment_addr = Address::generate(&env);
+    let platform_wallet = Address::generate(&env);
     env.mock_all_auths();
 
-    client.initialize(&admin, &500);
+    client.initialize(&admin, &platform_wallet, &500);
 
     let event_id = String::from_str(&env, "event_001");
     client.register_event(&event_id, &organizer, &payment_addr);
@@ -209,9 +232,10 @@ fn test_get_event_payment_info() {
     let admin = Address::generate(&env);
     let organizer = Address::generate(&env);
     let payment_addr = Address::generate(&env);
+    let platform_wallet = Address::generate(&env);
     env.mock_all_auths();
 
-    client.initialize(&admin, &750);
+    client.initialize(&admin, &platform_wallet, &750);
 
     let event_id = String::from_str(&env, "event_002");
     client.register_event(&event_id, &organizer, &payment_addr);
@@ -230,9 +254,10 @@ fn test_update_event_status() {
     let admin = Address::generate(&env);
     let organizer = Address::generate(&env);
     let payment_addr = Address::generate(&env);
+    let platform_wallet = Address::generate(&env);
     env.mock_all_auths();
 
-    client.initialize(&admin, &500);
+    client.initialize(&admin, &platform_wallet, &500);
 
     let event_id = String::from_str(&env, "event_001");
     client.register_event(&event_id, &organizer, &payment_addr);
@@ -251,9 +276,10 @@ fn test_event_inactive_error() {
     let admin = Address::generate(&env);
     let organizer = Address::generate(&env);
     let payment_addr = Address::generate(&env);
+    let platform_wallet = Address::generate(&env);
     env.mock_all_auths();
 
-    client.initialize(&admin, &500);
+    client.initialize(&admin, &platform_wallet, &500);
     let event_id = String::from_str(&env, "event_001");
     client.register_event(&event_id, &organizer, &payment_addr);
     client.update_event_status(&event_id, &false);
@@ -271,9 +297,10 @@ fn test_complete_event_lifecycle() {
     let admin = Address::generate(&env);
     let organizer = Address::generate(&env);
     let payment_addr = Address::generate(&env);
+    let platform_wallet = Address::generate(&env);
     env.mock_all_auths();
 
-    client.initialize(&admin, &600);
+    client.initialize(&admin, &platform_wallet, &600);
 
     let event_id = String::from_str(&env, "lifecycle_event");
     client.register_event(&event_id, &organizer, &payment_addr);

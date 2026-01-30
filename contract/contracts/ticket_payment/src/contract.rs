@@ -1,8 +1,10 @@
 use crate::storage::{
-    get_event_registry, get_payment, get_platform_wallet, get_usdc_token, set_event_registry,
-    set_platform_wallet, set_usdc_token, store_payment, update_payment_status,
+    get_event_registry, get_payment, get_platform_wallet, get_usdc_token, is_initialized,
+    set_event_registry, set_initialized, set_platform_wallet, set_usdc_token, store_payment,
+    update_payment_status,
 };
 use crate::types::{Payment, PaymentStatus};
+use crate::{error::TicketPaymentError, events::InitializationEvent};
 use soroban_sdk::{contract, contractimpl, symbol_short, token, Address, Env, String};
 
 // Event Registry interface
@@ -34,11 +36,29 @@ impl TicketPaymentContract {
         usdc_token: Address,
         platform_wallet: Address,
         event_registry: Address,
-    ) {
+    ) -> Result<(), TicketPaymentError> {
+        if is_initialized(&env) {
+            return Err(TicketPaymentError::AlreadyInitialized);
+        }
+
+        validate_address(&env, &usdc_token)?;
+        validate_address(&env, &platform_wallet)?;
+        validate_address(&env, &event_registry)?;
+
         // In a real scenario, we might want to check for admin authorization here.
-        set_usdc_token(&env, usdc_token);
-        set_platform_wallet(&env, platform_wallet);
-        set_event_registry(&env, event_registry);
+        set_usdc_token(&env, usdc_token.clone());
+        set_platform_wallet(&env, platform_wallet.clone());
+        set_event_registry(&env, event_registry.clone());
+        set_initialized(&env, true);
+
+        InitializationEvent {
+            usdc_token,
+            platform_wallet,
+            event_registry,
+        }
+        .publish(&env);
+
+        Ok(())
     }
 
     /// Processes a payment for an event ticket.
@@ -50,6 +70,9 @@ impl TicketPaymentContract {
         buyer_address: Address,
         amount: i128,
     ) -> String {
+        if !is_initialized(&env) {
+            panic!("Contract not initialized");
+        }
         buyer_address.require_auth();
 
         if amount <= 0 {
@@ -112,6 +135,9 @@ impl TicketPaymentContract {
 
     /// Confirms a payment after backend verification.
     pub fn confirm_payment(env: Env, payment_id: String, transaction_hash: String) {
+        if !is_initialized(&env) {
+            panic!("Contract not initialized");
+        }
         // In a real scenario, this would be restricted to a specific backend/admin address.
         update_payment_status(
             &env,
@@ -135,4 +161,11 @@ impl TicketPaymentContract {
     pub fn get_payment_status(env: Env, payment_id: String) -> Option<Payment> {
         get_payment(&env, payment_id)
     }
+}
+
+fn validate_address(env: &Env, address: &Address) -> Result<(), TicketPaymentError> {
+    if address == &env.current_contract_address() {
+        return Err(TicketPaymentError::InvalidAddress);
+    }
+    Ok(())
 }

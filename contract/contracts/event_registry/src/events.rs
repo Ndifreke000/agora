@@ -23,3 +23,12 @@ pub struct EventStatusUpdated {
 pub struct FeeUpdated {
     pub new_fee_percent: u32,
 }
+
+#[contractevent]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct InitializationEvent {
+    pub admin_address: Address,
+    pub platform_wallet: Address,
+    pub platform_fee_percent: u32,
+    pub timestamp: u64,
+}

@@ -94,3 +94,16 @@ pub fn get_event_registry(env: &Env) -> Address {
         .get(&DataKey::EventRegistry)
         .expect("Event registry not set")
 }
+
+pub fn set_initialized(env: &Env, value: bool) {
+    env.storage()
+        .persistent()
+        .set(&DataKey::Initialized, &value);
+}
+
+pub fn is_initialized(env: &Env) -> bool {
+    env.storage()
+        .persistent()
+        .get(&DataKey::Initialized)
+        .unwrap_or(false)
+}

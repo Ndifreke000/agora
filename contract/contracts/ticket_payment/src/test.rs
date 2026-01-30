@@ -1,6 +1,7 @@
 use super::contract::{event_registry, TicketPaymentContract, TicketPaymentContractClient};
 use super::storage::*;
 use super::types::{Payment, PaymentStatus};
+use crate::error::TicketPaymentError;
 use soroban_sdk::{
     testutils::{Address as _, Events},
     token, Address, Env, IntoVal, String, Symbol, TryIntoVal,
@@ -207,4 +208,51 @@ fn test_fee_calculation_variants() {
         .unwrap();
     assert_eq!(payment.platform_fee, 250); // 2.5% of 10000
     assert_eq!(payment.organizer_amount, 9750);
+}
+
+#[test]
+fn test_initialize_success() {
+    let env = Env::default();
+    let contract_id = env.register(TicketPaymentContract, ());
+    let client = TicketPaymentContractClient::new(&env, &contract_id);
+
+    let usdc_id = env
+        .register_stellar_asset_contract_v2(Address::generate(&env))
+        .address();
+    let platform_wallet = Address::generate(&env);
+    let event_registry_id = env.register(MockEventRegistry, ());
+
+    client.initialize(&usdc_id, &platform_wallet, &event_registry_id);
+}
+
+#[test]
+fn test_double_initialization_fails() {
+    let env = Env::default();
+    let contract_id = env.register(TicketPaymentContract, ());
+    let client = TicketPaymentContractClient::new(&env, &contract_id);
+
+    let usdc_id = env
+        .register_stellar_asset_contract_v2(Address::generate(&env))
+        .address();
+    let platform_wallet = Address::generate(&env);
+    let event_registry_id = env.register(MockEventRegistry, ());
+
+    client.initialize(&usdc_id, &platform_wallet, &event_registry_id);
+
+    let result = client.try_initialize(&usdc_id, &platform_wallet, &event_registry_id);
+    assert_eq!(result, Err(Ok(TicketPaymentError::AlreadyInitialized)));
+}
+
+#[test]
+fn test_initialize_invalid_address() {
+    let env = Env::default();
+    let contract_id = env.register(TicketPaymentContract, ());
+    let client = TicketPaymentContractClient::new(&env, &contract_id);
+
+    let invalid = client.address.clone();
+    let platform_wallet = Address::generate(&env);
+    let event_registry_id = env.register(MockEventRegistry, ());
+
+    let result = client.try_initialize(&invalid, &platform_wallet, &event_registry_id);
+    assert_eq!(result, Err(Ok(TicketPaymentError::InvalidAddress)));
 }

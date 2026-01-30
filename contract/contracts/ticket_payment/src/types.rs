@@ -33,4 +33,5 @@ pub enum DataKey {
     UsdcToken,              // USDC token address
     PlatformWallet,         // Platform wallet address
     EventRegistry,          // Event Registry contract address
+    Initialized,            // Initialization flag
 }

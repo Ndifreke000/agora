@@ -11,6 +11,7 @@ pub enum EventRegistryError {
     InvalidFeePercent = 5,
     EventInactive = 6,
     NotInitialized = 7,
+    AlreadyInitialized = 8,
 }
 
 impl core::fmt::Display for EventRegistryError {
@@ -27,6 +28,7 @@ impl core::fmt::Display for EventRegistryError {
                 write!(f, "Trying to interact with inactive event")
             }
             EventRegistryError::NotInitialized => write!(f, "Contract not initialized"),
+            EventRegistryError::AlreadyInitialized => write!(f, "Contract already initialized"),
         }
     }
 }
