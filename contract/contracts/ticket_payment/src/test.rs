@@ -143,6 +143,9 @@ fn test_process_payment_success() {
     // Mint USDC to buyer
     usdc_token.mint(&buyer, &amount);
 
+    // Approve contract to spend tokens
+    token::Client::new(&env, &usdc_id).approve(&buyer, &client.address, &amount, &99999);
+
     // Verify minting works (check balances)
     let buyer_balance = token::Client::new(&env, &usdc_id).balance(&buyer);
     assert_eq!(buyer_balance, amount);
@@ -155,10 +158,11 @@ fn test_process_payment_success() {
         client.process_payment(&payment_id, &event_id, &tier_id, &buyer, &usdc_id, &amount);
     assert_eq!(result_id, payment_id);
 
-    // Check balances
-    let platform_balance = token::Client::new(&env, &usdc_id).balance(&platform_wallet);
+    // Check escrow balances
+    let escrow_balance = client.get_event_escrow_balance(&event_id);
     let expected_fee = (amount * 500) / 10000;
-    assert_eq!(platform_balance, expected_fee);
+    assert_eq!(escrow_balance.platform_fee, expected_fee);
+    assert_eq!(escrow_balance.organizer_amount, amount - expected_fee);
 
     // Check payment record
     let payment = client.get_payment_status(&payment_id).unwrap();
@@ -269,6 +273,7 @@ fn test_fee_calculation_variants() {
 
     let buyer = Address::generate(&env);
     token::StellarAssetClient::new(&env, &usdc_id).mint(&buyer, &10000i128);
+    token::Client::new(&env, &usdc_id).approve(&buyer, &client.address, &10000i128, &99999);
 
     client.process_payment(
         &String::from_str(&env, "p1"),
@@ -517,6 +522,9 @@ fn test_process_payment_with_multiple_tokens() {
     token::StellarAssetClient::new(&env, &usdc_id).mint(&buyer1, &usdc_amount);
     token::StellarAssetClient::new(&env, &xlm_id).mint(&buyer2, &xlm_amount);
 
+    token::Client::new(&env, &usdc_id).approve(&buyer1, &client.address, &usdc_amount, &99999);
+    token::Client::new(&env, &xlm_id).approve(&buyer2, &client.address, &xlm_amount, &99999);
+
     client.process_payment(
         &String::from_str(&env, "pay_usdc"),
         &String::from_str(&env, "event_1"),
@@ -535,14 +543,12 @@ fn test_process_payment_with_multiple_tokens() {
         &xlm_amount,
     );
 
-    let usdc_platform_balance = token::Client::new(&env, &usdc_id).balance(&platform_wallet);
-    let xlm_platform_balance = token::Client::new(&env, &xlm_id).balance(&platform_wallet);
-
+    // Check escrow balances instead of direct transfers
+    let escrow_balance = client.get_event_escrow_balance(&String::from_str(&env, "event_1"));
     let expected_usdc_fee = (usdc_amount * 500) / 10000;
     let expected_xlm_fee = (xlm_amount * 500) / 10000;
-
-    assert_eq!(usdc_platform_balance, expected_usdc_fee);
-    assert_eq!(xlm_platform_balance, expected_xlm_fee);
+    let total_expected_fee = expected_usdc_fee + expected_xlm_fee;
+    assert_eq!(escrow_balance.platform_fee, total_expected_fee);
 
     let payment1 = client
         .get_payment_status(&String::from_str(&env, "pay_usdc"))
@@ -680,6 +686,7 @@ fn test_inventory_increment_on_successful_payment() {
     let buyer = Address::generate(&env);
     let amount = 1000_0000000i128;
     token::StellarAssetClient::new(&env, &usdc_id).mint(&buyer, &(amount * 5));
+    token::Client::new(&env, &usdc_id).approve(&buyer, &client.address, &(amount * 5), &99999);
 
     // Process first payment - should succeed
     let result1 = client.process_payment(
@@ -702,4 +709,80 @@ fn test_inventory_increment_on_successful_payment() {
         &amount,
     );
     assert_eq!(result2, String::from_str(&env, "pay_2"));
+}
+
+#[test]
+fn test_withdraw_organizer_funds() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, _admin, usdc_id, _, _) = setup_test(&env);
+    let usdc_token = token::StellarAssetClient::new(&env, &usdc_id);
+
+    let buyer = Address::generate(&env);
+    let amount = 1000_0000000i128;
+    usdc_token.mint(&buyer, &amount);
+
+    // Approve contract to spend tokens
+    token::Client::new(&env, &usdc_id).approve(&buyer, &client.address, &amount, &99999);
+
+    let event_id = String::from_str(&env, "event_1");
+    client.process_payment(
+        &String::from_str(&env, "pay_1"),
+        &event_id,
+        &String::from_str(&env, "tier_1"),
+        &buyer,
+        &usdc_id,
+        &amount,
+    );
+
+    let balance = client.get_event_escrow_balance(&event_id);
+    assert!(balance.organizer_amount > 0);
+
+    let withdrawn = client.withdraw_organizer_funds(&event_id, &usdc_id);
+    assert_eq!(withdrawn, balance.organizer_amount);
+
+    let new_balance = client.get_event_escrow_balance(&event_id);
+    assert_eq!(new_balance.organizer_amount, 0);
+}
+
+#[test]
+fn test_withdraw_platform_fees() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, _admin, usdc_id, platform_wallet, _) = setup_test(&env);
+    let usdc_token = token::StellarAssetClient::new(&env, &usdc_id);
+
+    let buyer = Address::generate(&env);
+    let amount = 1000_0000000i128;
+    usdc_token.mint(&buyer, &amount);
+
+    // Approve contract to spend tokens
+    token::Client::new(&env, &usdc_id).approve(&buyer, &client.address, &amount, &99999);
+
+    let event_id = String::from_str(&env, "event_1");
+    client.process_payment(
+        &String::from_str(&env, "pay_1"),
+        &event_id,
+        &String::from_str(&env, "tier_1"),
+        &buyer,
+        &usdc_id,
+        &amount,
+    );
+
+    let balance = client.get_event_escrow_balance(&event_id);
+    let initial_platform_balance = token::Client::new(&env, &usdc_id).balance(&platform_wallet);
+
+    let withdrawn = client.withdraw_platform_fees(&event_id, &usdc_id);
+    assert_eq!(withdrawn, balance.platform_fee);
+
+    let final_platform_balance = token::Client::new(&env, &usdc_id).balance(&platform_wallet);
+    assert_eq!(
+        final_platform_balance - initial_platform_balance,
+        balance.platform_fee
+    );
+
+    let new_balance = client.get_event_escrow_balance(&event_id);
+    assert_eq!(new_balance.platform_fee, 0);
 }

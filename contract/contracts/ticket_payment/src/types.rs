@@ -26,6 +26,13 @@ pub struct Payment {
 }
 
 #[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EventBalance {
+    pub organizer_amount: i128,
+    pub platform_fee: i128,
+}
+
+#[contracttype]
 pub enum DataKey {
     Payment(String),         // payment_id -> Payment
     EventPayments(String),   // event_id -> Vec<payment_id>
@@ -36,4 +43,5 @@ pub enum DataKey {
     EventRegistry,           // Event Registry contract address
     Initialized,             // Initialization flag
     TokenWhitelist(Address), // token_address -> bool
+    Balances(String),        // event_id -> EventBalance (escrow tracking)
 }

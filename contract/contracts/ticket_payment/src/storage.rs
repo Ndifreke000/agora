@@ -1,4 +1,4 @@
-use crate::types::{DataKey, Payment, PaymentStatus};
+use crate::types::{DataKey, EventBalance, Payment, PaymentStatus};
 use soroban_sdk::{vec, Address, Env, String, Vec};
 
 pub fn set_admin(env: &Env, admin: &Address) {
@@ -133,4 +133,34 @@ pub fn is_token_whitelisted(env: &Env, token: &Address) -> bool {
         .persistent()
         .get(&DataKey::TokenWhitelist(token.clone()))
         .unwrap_or(false)
+}
+
+pub fn get_event_balance(env: &Env, event_id: String) -> EventBalance {
+    env.storage()
+        .persistent()
+        .get(&DataKey::Balances(event_id))
+        .unwrap_or(EventBalance {
+            organizer_amount: 0,
+            platform_fee: 0,
+        })
+}
+
+pub fn update_event_balance(
+    env: &Env,
+    event_id: String,
+    organizer_amount: i128,
+    platform_fee: i128,
+) {
+    let mut balance = get_event_balance(env, event_id.clone());
+    balance.organizer_amount += organizer_amount;
+    balance.platform_fee += platform_fee;
+    env.storage()
+        .persistent()
+        .set(&DataKey::Balances(event_id), &balance);
+}
+
+pub fn set_event_balance(env: &Env, event_id: String, balance: EventBalance) {
+    env.storage()
+        .persistent()
+        .set(&DataKey::Balances(event_id), &balance);
 }

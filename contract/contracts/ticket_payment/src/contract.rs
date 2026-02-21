@@ -1,8 +1,8 @@
 use crate::storage::{
-    add_token_to_whitelist, get_admin, get_event_registry, get_payment, get_platform_wallet,
-    is_initialized, is_token_whitelisted, remove_token_from_whitelist, set_admin,
-    set_event_registry, set_initialized, set_platform_wallet, set_usdc_token, store_payment,
-    update_payment_status,
+    add_token_to_whitelist, get_admin, get_event_balance, get_event_registry, get_payment,
+    get_platform_wallet, is_initialized, is_token_whitelisted, remove_token_from_whitelist,
+    set_admin, set_event_registry, set_initialized, set_platform_wallet, set_usdc_token,
+    store_payment, update_event_balance, update_payment_status,
 };
 use crate::types::{Payment, PaymentStatus};
 use crate::{
@@ -181,28 +181,40 @@ impl TicketPaymentContract {
         let platform_fee = (amount * event_info.platform_fee_percent as i128) / 10000;
         let organizer_amount = amount - platform_fee;
 
-        // 3. Transfer tokens from buyer (splitting payment)
+        // 3. Transfer tokens to contract (escrow)
         let token_client = token::Client::new(&env, &token_address);
-        let platform_wallet = get_platform_wallet(&env);
+        let contract_address = env.current_contract_address();
 
-        // Transfer platform fee
-        if platform_fee > 0 {
-            token_client.transfer(&buyer_address, &platform_wallet, &platform_fee);
+        // Verify allowance
+        let allowance = token_client.allowance(&buyer_address, &contract_address);
+        if allowance < amount {
+            return Err(TicketPaymentError::InsufficientAllowance);
         }
 
-        // Transfer organizer amount
-        if organizer_amount > 0 {
-            token_client.transfer(
-                &buyer_address,
-                &event_info.payment_address,
-                &organizer_amount,
-            );
+        // Get balance before transfer
+        let balance_before = token_client.balance(&contract_address);
+
+        // Transfer full amount to contract
+        token_client.transfer_from(
+            &contract_address,
+            &buyer_address,
+            &contract_address,
+            &amount,
+        );
+
+        // Verify balance after transfer
+        let balance_after = token_client.balance(&contract_address);
+        if balance_after - balance_before != amount {
+            return Err(TicketPaymentError::TransferVerificationFailed);
         }
 
-        // 4. Increment inventory after successful payment
+        // 4. Update escrow balances
+        update_event_balance(&env, event_id.clone(), organizer_amount, platform_fee);
+
+        // 5. Increment inventory after successful payment
         registry_client.increment_inventory(&event_id);
 
-        // 5. Create payment record
+        // 6. Create payment record
         let payment = Payment {
             payment_id: payment_id.clone(),
             event_id: event_id.clone(),
@@ -219,7 +231,7 @@ impl TicketPaymentContract {
 
         store_payment(&env, payment);
 
-        // 6. Emit payment event
+        // 7. Emit payment event
         env.events().publish(
             (AgoraEvent::PaymentProcessed,),
             PaymentProcessedEvent {
@@ -270,6 +282,84 @@ impl TicketPaymentContract {
     /// Returns the status and details of a payment.
     pub fn get_payment_status(env: Env, payment_id: String) -> Option<Payment> {
         get_payment(&env, payment_id)
+    }
+
+    /// Returns the escrowed balance for an event.
+    pub fn get_event_escrow_balance(env: Env, event_id: String) -> crate::types::EventBalance {
+        get_event_balance(&env, event_id)
+    }
+
+    /// Withdraw organizer funds from escrow.
+    pub fn withdraw_organizer_funds(
+        env: Env,
+        event_id: String,
+        token_address: Address,
+    ) -> Result<i128, TicketPaymentError> {
+        let event_registry_addr = get_event_registry(&env);
+        let registry_client = event_registry::Client::new(&env, &event_registry_addr);
+        let event_info = registry_client
+            .try_get_event(&event_id)
+            .ok()
+            .and_then(|r| r.ok())
+            .flatten()
+            .ok_or(TicketPaymentError::EventNotFound)?;
+
+        event_info.organizer_address.require_auth();
+
+        let balance = get_event_balance(&env, event_id.clone());
+        if balance.organizer_amount <= 0 {
+            return Ok(0);
+        }
+
+        token::Client::new(&env, &token_address).transfer(
+            &env.current_contract_address(),
+            &event_info.organizer_address,
+            &balance.organizer_amount,
+        );
+
+        crate::storage::set_event_balance(
+            &env,
+            event_id,
+            crate::types::EventBalance {
+                organizer_amount: 0,
+                platform_fee: balance.platform_fee,
+            },
+        );
+
+        Ok(balance.organizer_amount)
+    }
+
+    /// Withdraw platform fees from escrow.
+    pub fn withdraw_platform_fees(
+        env: Env,
+        event_id: String,
+        token_address: Address,
+    ) -> Result<i128, TicketPaymentError> {
+        let admin = get_admin(&env).ok_or(TicketPaymentError::NotInitialized)?;
+        admin.require_auth();
+
+        let balance = get_event_balance(&env, event_id.clone());
+        if balance.platform_fee <= 0 {
+            return Ok(0);
+        }
+
+        let platform_wallet = get_platform_wallet(&env);
+        token::Client::new(&env, &token_address).transfer(
+            &env.current_contract_address(),
+            &platform_wallet,
+            &balance.platform_fee,
+        );
+
+        crate::storage::set_event_balance(
+            &env,
+            event_id,
+            crate::types::EventBalance {
+                organizer_amount: balance.organizer_amount,
+                platform_fee: 0,
+            },
+        );
+
+        Ok(balance.platform_fee)
     }
 }
 
