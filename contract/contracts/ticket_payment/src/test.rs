@@ -38,7 +38,7 @@ impl MockEventRegistry {
         })
     }
 
-    pub fn increment_inventory(_env: Env, _event_id: String) {}
+    pub fn increment_inventory(_env: Env, _event_id: String, _tier_id: String) {}
 }
 
 // Another Mock for different fee
@@ -72,7 +72,7 @@ impl MockEventRegistry2 {
         })
     }
 
-    pub fn increment_inventory(_env: Env, _event_id: String) {}
+    pub fn increment_inventory(_env: Env, _event_id: String, _tier_id: String) {}
 }
 
 // Mock Event Registry returning EventNotFound
@@ -89,7 +89,7 @@ impl MockEventRegistryNotFound {
         None
     }
 
-    pub fn increment_inventory(_env: Env, _event_id: String) {}
+    pub fn increment_inventory(_env: Env, _event_id: String, _tier_id: String) {}
 }
 
 // Manually mapping the trap in Soroban tests is sometimes tricky if we just panic.
@@ -594,7 +594,7 @@ impl MockEventRegistryMaxSupply {
         })
     }
 
-    pub fn increment_inventory(_env: Env, _event_id: String) {}
+    pub fn increment_inventory(_env: Env, _event_id: String, _tier_id: String) {}
 }
 
 #[test]
@@ -663,7 +663,7 @@ impl MockEventRegistryWithInventory {
         })
     }
 
-    pub fn increment_inventory(env: Env, _event_id: String) {
+    pub fn increment_inventory(env: Env, _event_id: String, _tier_id: String) {
         let key = Symbol::new(&env, "supply");
         let current: i128 = env.storage().instance().get(&key).unwrap_or(0);
         env.storage().instance().set(&key, &(current + 1));

@@ -2,7 +2,7 @@ use crate::storage::{
     add_token_to_whitelist, get_admin, get_event_balance, get_event_registry, get_payment,
     get_platform_wallet, is_initialized, is_token_whitelisted, remove_token_from_whitelist,
     set_admin, set_event_registry, set_initialized, set_platform_wallet, set_usdc_token,
-    store_payment, update_payment_status,
+    store_payment, update_event_balance, update_payment_status,
 };
 use crate::types::{Payment, PaymentStatus};
 use crate::{
@@ -220,7 +220,10 @@ impl TicketPaymentContract {
             return Err(TicketPaymentError::TransferVerificationFailed);
         }
 
-        // 4. Increment inventory after successful payment
+        // 4. Update escrow balances
+        update_event_balance(&env, event_id.clone(), organizer_amount, platform_fee);
+
+        // 5. Increment inventory after successful payment
         registry_client.increment_inventory(&event_id, &ticket_tier_id);
 
         // 6. Create payment record
