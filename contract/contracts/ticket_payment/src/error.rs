@@ -11,8 +11,10 @@ pub enum TicketPaymentError {
     EventInactive = 5,
     TokenNotWhitelisted = 6,
     MaxSupplyExceeded = 7,
-    InsufficientAllowance = 8,
-    TransferVerificationFailed = 9,
+    PaymentNotFound = 8,
+    InvalidPaymentStatus = 9,
+    TicketNotRefundable = 10,
+    TierNotFound = 11,
 }
 
 impl core::fmt::Display for TicketPaymentError {
@@ -27,12 +29,12 @@ impl core::fmt::Display for TicketPaymentError {
             TicketPaymentError::EventInactive => write!(f, "Event is inactive"),
             TicketPaymentError::TokenNotWhitelisted => write!(f, "Token not whitelisted"),
             TicketPaymentError::MaxSupplyExceeded => write!(f, "Ticket supply exceeded"),
-            TicketPaymentError::InsufficientAllowance => {
-                write!(f, "Insufficient token allowance")
+            TicketPaymentError::PaymentNotFound => write!(f, "Payment not found"),
+            TicketPaymentError::InvalidPaymentStatus => {
+                write!(f, "Invalid payment status for refund")
             }
-            TicketPaymentError::TransferVerificationFailed => {
-                write!(f, "Transfer verification failed")
-            }
+            TicketPaymentError::TicketNotRefundable => write!(f, "Ticket is not refundable"),
+            TicketPaymentError::TierNotFound => write!(f, "Ticket tier not found"),
         }
     }
 }

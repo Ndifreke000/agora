@@ -34,6 +34,7 @@ impl MockEventRegistry {
             ),
             max_supply: 0,
             current_supply: 0,
+            tiers: soroban_sdk::Map::new(&env),
         })
     }
 
@@ -67,6 +68,7 @@ impl MockEventRegistry2 {
             ),
             max_supply: 0,
             current_supply: 0,
+            tiers: soroban_sdk::Map::new(&env),
         })
     }
 
@@ -588,6 +590,7 @@ impl MockEventRegistryMaxSupply {
             ),
             max_supply: 100,
             current_supply: 100,
+            tiers: soroban_sdk::Map::new(&env),
         })
     }
 
@@ -656,6 +659,7 @@ impl MockEventRegistryWithInventory {
             ),
             max_supply: 10,
             current_supply,
+            tiers: soroban_sdk::Map::new(&env),
         })
     }
 
