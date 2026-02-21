@@ -134,7 +134,7 @@ fn test_process_payment_success() {
     let env = Env::default();
     env.mock_all_auths();
 
-    let (client, _admin, usdc_id, platform_wallet, _) = setup_test(&env);
+    let (client, _admin, usdc_id, _platform_wallet, _) = setup_test(&env);
     let usdc_token = token::StellarAssetClient::new(&env, &usdc_id);
 
     let buyer = Address::generate(&env);
@@ -505,7 +505,7 @@ fn test_process_payment_with_multiple_tokens() {
     let env = Env::default();
     env.mock_all_auths();
 
-    let (client, _admin, usdc_id, platform_wallet, _) = setup_test(&env);
+    let (client, _admin, usdc_id, _platform_wallet, _) = setup_test(&env);
 
     let xlm_id = env
         .register_stellar_asset_contract_v2(Address::generate(&env))
