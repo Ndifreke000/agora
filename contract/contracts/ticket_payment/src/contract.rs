@@ -307,7 +307,7 @@ impl TicketPaymentContract {
         event_info.organizer_address.require_auth();
 
         let balance = get_event_balance(&env, event_id.clone());
-        if balance.organizer_amount <= 0 {
+        if balance.organizer_amount == 0 {
             return Ok(0);
         }
 
@@ -339,7 +339,7 @@ impl TicketPaymentContract {
         admin.require_auth();
 
         let balance = get_event_balance(&env, event_id.clone());
-        if balance.platform_fee <= 0 {
+        if balance.platform_fee == 0 {
             return Ok(0);
         }
 
