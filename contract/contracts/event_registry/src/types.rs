@@ -16,6 +16,12 @@ pub struct EventInfo {
     pub is_active: bool,
     /// Timestamp when the event was created
     pub created_at: u64,
+    /// IPFS Content Identifier storing rich metadata details
+    pub metadata_cid: String,
+    /// Maximum number of tickets available for this event (0 = unlimited)
+    pub max_supply: i128,
+    /// Current number of tickets that have been successfully purchased
+    pub current_supply: i128,
 }
 
 /// Payment information for an event
@@ -33,10 +39,16 @@ pub struct PaymentInfo {
 pub enum DataKey {
     /// The administrator address for contract management
     Admin,
+    /// The platform wallet address for fee collection
+    PlatformWallet,
     /// The global platform fee percentage
     PlatformFee,
+    /// Initialization flag
+    Initialized,
     /// Mapping of event_id to EventInfo (Persistent)
     Event(String),
     /// Mapping of organizer_address to a list of their event_ids (Persistent)
     OrganizerEvents(Address),
+    /// The authorized TicketPayment contract address for inventory updates
+    TicketPaymentContract,
 }

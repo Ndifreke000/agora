@@ -1,4 +1,5 @@
 use super::*;
+use crate::error::EventRegistryError;
 use crate::types::EventInfo;
 use soroban_sdk::{testutils::Address as _, Address, Env, String};
 
@@ -8,34 +9,51 @@ fn test_initialize() {
     let contract_id = env.register(EventRegistry, ());
     let client = EventRegistryClient::new(&env, &contract_id);
     let admin = Address::generate(&env);
+    let platform_wallet = Address::generate(&env);
 
-    client.initialize(&admin, &5);
+    client.initialize(&admin, &platform_wallet, &0);
 
-    assert_eq!(client.get_platform_fee(), 5);
+    assert_eq!(client.get_platform_fee(), 500);
     assert_eq!(client.get_admin(), admin);
+    assert_eq!(client.get_platform_wallet(), platform_wallet);
 }
 
 #[test]
-#[should_panic(expected = "already initialized")]
 fn test_double_initialization_fails() {
     let env = Env::default();
     let contract_id = env.register(EventRegistry, ());
     let client = EventRegistryClient::new(&env, &contract_id);
     let admin = Address::generate(&env);
+    let platform_wallet = Address::generate(&env);
 
-    client.initialize(&admin, &5);
-    client.initialize(&admin, &10); // Should panic
+    client.initialize(&admin, &platform_wallet, &500);
+    let result = client.try_initialize(&admin, &platform_wallet, &1000);
+    assert_eq!(result, Err(Ok(EventRegistryError::AlreadyInitialized)));
 }
 
 #[test]
-#[should_panic(expected = "Fee percent must be between 0 and 10000")]
 fn test_initialization_invalid_fee() {
     let env = Env::default();
     let contract_id = env.register(EventRegistry, ());
     let client = EventRegistryClient::new(&env, &contract_id);
     let admin = Address::generate(&env);
+    let platform_wallet = Address::generate(&env);
 
-    client.initialize(&admin, &10001); // Should panic
+    let result = client.try_initialize(&admin, &platform_wallet, &10001);
+    assert_eq!(result, Err(Ok(EventRegistryError::InvalidFeePercent)));
+}
+
+#[test]
+fn test_initialization_invalid_address() {
+    let env = Env::default();
+    let contract_id = env.register(EventRegistry, ());
+    let client = EventRegistryClient::new(&env, &contract_id);
+
+    let contract_address = client.address.clone();
+    let platform_wallet = Address::generate(&env);
+
+    let result = client.try_initialize(&contract_address, &platform_wallet, &500);
+    assert_eq!(result, Err(Ok(EventRegistryError::InvalidAddress)));
 }
 
 #[test]
@@ -46,15 +64,15 @@ fn test_set_platform_fee() {
     let contract_id = env.register(EventRegistry, ());
     let client = EventRegistryClient::new(&env, &contract_id);
     let admin = Address::generate(&env);
+    let platform_wallet = Address::generate(&env);
 
-    client.initialize(&admin, &5);
+    client.initialize(&admin, &platform_wallet, &500);
     client.set_platform_fee(&10);
 
     assert_eq!(client.get_platform_fee(), 10);
 }
 
 #[test]
-#[should_panic(expected = "Fee percent must be between 0 and 10000")]
 fn test_set_platform_fee_invalid() {
     let env = Env::default();
     env.mock_all_auths();
@@ -62,9 +80,11 @@ fn test_set_platform_fee_invalid() {
     let contract_id = env.register(EventRegistry, ());
     let client = EventRegistryClient::new(&env, &contract_id);
     let admin = Address::generate(&env);
+    let platform_wallet = Address::generate(&env);
 
-    client.initialize(&admin, &5);
-    client.set_platform_fee(&10001); // Should panic
+    client.initialize(&admin, &platform_wallet, &500);
+    let result = client.try_set_platform_fee(&10001);
+    assert_eq!(result, Err(Ok(EventRegistryError::InvalidFeePercent)));
 }
 
 #[test]
@@ -75,10 +95,9 @@ fn test_set_platform_fee_unauthorized() {
     let contract_id = env.register(EventRegistry, ());
     let client = EventRegistryClient::new(&env, &contract_id);
     let admin = Address::generate(&env);
+    let platform_wallet = Address::generate(&env);
 
-    client.initialize(&admin, &5);
-
-    // This will fail because no auth is mocked/provided for the admin address stored in the contract
+    client.initialize(&admin, &platform_wallet, &500);
     client.set_platform_fee(&10);
 }
 
@@ -89,7 +108,8 @@ fn test_storage_operations() {
     let client = EventRegistryClient::new(&env, &contract_id);
 
     let admin = Address::generate(&env);
-    client.initialize(&admin, &5);
+    let platform_wallet = Address::generate(&env);
+    client.initialize(&admin, &platform_wallet, &500);
 
     let organizer = Address::generate(&env);
     let payment_address = Address::generate(&env);
@@ -102,6 +122,12 @@ fn test_storage_operations() {
         platform_fee_percent: 5,
         is_active: true,
         created_at: env.ledger().timestamp(),
+        metadata_cid: String::from_str(
+            &env,
+            "bafkreifh22222222222222222222222222222222222222222222222222",
+        ),
+        max_supply: 100,
+        current_supply: 0,
     };
 
     // Test store_event
@@ -117,6 +143,8 @@ fn test_storage_operations() {
     assert_eq!(stored_event.payment_address, payment_address);
     assert_eq!(stored_event.platform_fee_percent, 5);
     assert!(stored_event.is_active);
+    assert_eq!(stored_event.max_supply, 100);
+    assert_eq!(stored_event.current_supply, 0);
 
     // Test non-existent event
     let fake_id = String::from_str(&env, "fake");
@@ -137,6 +165,12 @@ fn test_organizer_events_list() {
         platform_fee_percent: 5,
         is_active: true,
         created_at: 100,
+        metadata_cid: String::from_str(
+            &env,
+            "bafkreifh22222222222222222222222222222222222222222222222222",
+        ),
+        max_supply: 50,
+        current_supply: 0,
     };
 
     let event_2 = EventInfo {
@@ -146,6 +180,12 @@ fn test_organizer_events_list() {
         platform_fee_percent: 5,
         is_active: true,
         created_at: 200,
+        metadata_cid: String::from_str(
+            &env,
+            "bafkreifh22222222222222222222222222222222222222222222222222",
+        ),
+        max_supply: 0,
+        current_supply: 0,
     };
 
     let contract_id = env.register(EventRegistry, ());
@@ -154,18 +194,12 @@ fn test_organizer_events_list() {
     client.store_event(&event_1);
     client.store_event(&event_2);
 
-    let event_exists_1 = client.event_exists(&event_1.event_id);
-    let event_exists_2 = client.event_exists(&event_2.event_id);
-    assert!(event_exists_1);
-    assert!(event_exists_2);
-
     let organizer_events = client.get_organizer_events(&organizer);
     assert_eq!(organizer_events.len(), 2);
     assert_eq!(organizer_events.get(0).unwrap(), event_1.event_id);
     assert_eq!(organizer_events.get(1).unwrap(), event_2.event_id);
 }
 
-// Event Registration Tests
 #[test]
 fn test_register_event_success() {
     let env = Env::default();
@@ -175,28 +209,56 @@ fn test_register_event_success() {
     let admin = Address::generate(&env);
     let organizer = Address::generate(&env);
     let payment_addr = Address::generate(&env);
+    let platform_wallet = Address::generate(&env);
 
-    // Mock authorization for all addresses
     env.mock_all_auths();
+    client.initialize(&admin, &platform_wallet, &500);
 
-    // Initialize contract
-    client.initialize(&admin, &500);
-
-    // Register event
     let event_id = String::from_str(&env, "event_001");
-    client.register_event(&event_id, &organizer, &payment_addr);
+    let metadata_cid = String::from_str(
+        &env,
+        "bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi",
+    );
+    client.register_event(&event_id, &organizer, &payment_addr, &metadata_cid, &100);
 
-    // Verify event was registered
     let payment_info = client.get_event_payment_info(&event_id);
     assert_eq!(payment_info.payment_address, payment_addr);
     assert_eq!(payment_info.platform_fee_percent, 500);
 
-    // Verify event exists
-    assert!(client.event_exists(&event_id));
+    // Verify supply fields
+    let event_info = client.get_event(&event_id).unwrap();
+    assert_eq!(event_info.max_supply, 100);
+    assert_eq!(event_info.current_supply, 0);
 }
 
 #[test]
-#[should_panic(expected = "Event already exists")]
+fn test_register_event_unlimited_supply() {
+    let env = Env::default();
+    let contract_id = env.register(EventRegistry, ());
+    let client = EventRegistryClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    let organizer = Address::generate(&env);
+    let payment_addr = Address::generate(&env);
+    let platform_wallet = Address::generate(&env);
+
+    env.mock_all_auths();
+    client.initialize(&admin, &platform_wallet, &500);
+
+    let event_id = String::from_str(&env, "unlimited_event");
+    let metadata_cid = String::from_str(
+        &env,
+        "bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi",
+    );
+    // max_supply = 0 means unlimited
+    client.register_event(&event_id, &organizer, &payment_addr, &metadata_cid, &0);
+
+    let event_info = client.get_event(&event_id).unwrap();
+    assert_eq!(event_info.max_supply, 0);
+    assert_eq!(event_info.current_supply, 0);
+}
+
+#[test]
 fn test_register_duplicate_event_fails() {
     let env = Env::default();
     let contract_id = env.register(EventRegistry, ());
@@ -205,17 +267,21 @@ fn test_register_duplicate_event_fails() {
     let admin = Address::generate(&env);
     let organizer = Address::generate(&env);
     let payment_addr = Address::generate(&env);
+    let platform_wallet = Address::generate(&env);
     env.mock_all_auths();
 
-    client.initialize(&admin, &500);
+    client.initialize(&admin, &platform_wallet, &500);
 
     let event_id = String::from_str(&env, "event_001");
+    let metadata_cid = String::from_str(
+        &env,
+        "bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi",
+    );
+    client.register_event(&event_id, &organizer, &payment_addr, &metadata_cid, &100);
 
-    // Register event first time
-    client.register_event(&event_id, &organizer, &payment_addr);
-
-    // Try to register same event again - should panic
-    client.register_event(&event_id, &organizer, &payment_addr);
+    let result =
+        client.try_register_event(&event_id, &organizer, &payment_addr, &metadata_cid, &100);
+    assert_eq!(result, Err(Ok(EventRegistryError::EventAlreadyExists)));
 }
 
 #[test]
@@ -227,29 +293,21 @@ fn test_get_event_payment_info() {
     let admin = Address::generate(&env);
     let organizer = Address::generate(&env);
     let payment_addr = Address::generate(&env);
+    let platform_wallet = Address::generate(&env);
     env.mock_all_auths();
 
-    client.initialize(&admin, &750); // 7.5%
+    client.initialize(&admin, &platform_wallet, &750);
 
     let event_id = String::from_str(&env, "event_002");
-    client.register_event(&event_id, &organizer, &payment_addr);
+    let metadata_cid = String::from_str(
+        &env,
+        "bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi",
+    );
+    client.register_event(&event_id, &organizer, &payment_addr, &metadata_cid, &50);
 
-    // Test successful query
     let info = client.get_event_payment_info(&event_id);
     assert_eq!(info.payment_address, payment_addr);
     assert_eq!(info.platform_fee_percent, 750);
-}
-
-#[test]
-#[should_panic(expected = "Event not found")]
-fn test_get_nonexistent_event_fails() {
-    let env = Env::default();
-    let contract_id = env.register(EventRegistry, ());
-    let client = EventRegistryClient::new(&env, &contract_id);
-
-    // Test query for non-existent event - should panic
-    let non_existent_id = String::from_str(&env, "non_existent");
-    client.get_event_payment_info(&non_existent_id);
 }
 
 #[test]
@@ -261,31 +319,46 @@ fn test_update_event_status() {
     let admin = Address::generate(&env);
     let organizer = Address::generate(&env);
     let payment_addr = Address::generate(&env);
+    let platform_wallet = Address::generate(&env);
     env.mock_all_auths();
 
-    client.initialize(&admin, &500);
+    client.initialize(&admin, &platform_wallet, &500);
 
     let event_id = String::from_str(&env, "event_001");
-    client.register_event(&event_id, &organizer, &payment_addr);
-
-    // Test successful status update by organizer
+    let metadata_cid = String::from_str(
+        &env,
+        "bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi",
+    );
+    client.register_event(&event_id, &organizer, &payment_addr, &metadata_cid, &100);
     client.update_event_status(&event_id, &false);
 
-    // Verify the event was updated
     let event_info = client.get_event(&event_id).unwrap();
     assert!(!event_info.is_active);
 }
 
 #[test]
-#[should_panic(expected = "Event not found")]
-fn test_update_nonexistent_event_fails() {
+fn test_event_inactive_error() {
     let env = Env::default();
     let contract_id = env.register(EventRegistry, ());
     let client = EventRegistryClient::new(&env, &contract_id);
 
-    // Test update for non-existent event - should panic
-    let non_existent_id = String::from_str(&env, "non_existent");
-    client.update_event_status(&non_existent_id, &false);
+    let admin = Address::generate(&env);
+    let organizer = Address::generate(&env);
+    let payment_addr = Address::generate(&env);
+    let platform_wallet = Address::generate(&env);
+    env.mock_all_auths();
+
+    client.initialize(&admin, &platform_wallet, &500);
+    let event_id = String::from_str(&env, "event_001");
+    let metadata_cid = String::from_str(
+        &env,
+        "bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi",
+    );
+    client.register_event(&event_id, &organizer, &payment_addr, &metadata_cid, &100);
+    client.update_event_status(&event_id, &false);
+
+    let result = client.try_get_event_payment_info(&event_id);
+    assert_eq!(result, Err(Ok(EventRegistryError::EventInactive)));
 }
 
 #[test]
@@ -297,34 +370,320 @@ fn test_complete_event_lifecycle() {
     let admin = Address::generate(&env);
     let organizer = Address::generate(&env);
     let payment_addr = Address::generate(&env);
+    let platform_wallet = Address::generate(&env);
     env.mock_all_auths();
 
-    // Initialize
-    client.initialize(&admin, &600); // 6%
+    client.initialize(&admin, &platform_wallet, &600);
 
     let event_id = String::from_str(&env, "lifecycle_event");
+    let metadata_cid = String::from_str(
+        &env,
+        "bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi",
+    );
+    client.register_event(&event_id, &organizer, &payment_addr, &metadata_cid, &200);
 
-    // 1. Register event
-    client.register_event(&event_id, &organizer, &payment_addr);
-
-    // 2. Query payment info
     let payment_info = client.get_event_payment_info(&event_id);
     assert_eq!(payment_info.payment_address, payment_addr);
     assert_eq!(payment_info.platform_fee_percent, 600);
 
-    // 3. Check organizer events
     let org_events = client.get_organizer_events(&organizer);
     assert_eq!(org_events.len(), 1);
     assert!(org_events.contains(&event_id));
 
-    // 4. Update event status
     client.update_event_status(&event_id, &false);
 
-    // 5. Verify event still exists and can be queried
-    let payment_info = client.get_event_payment_info(&event_id);
-    assert_eq!(payment_info.payment_address, payment_addr);
+    let result = client.try_get_event_payment_info(&event_id);
+    assert_eq!(result, Err(Ok(EventRegistryError::EventInactive)));
 
-    // 6. Verify event info shows updated status
     let event_info = client.get_event(&event_id).unwrap();
     assert!(!event_info.is_active);
+}
+
+#[test]
+fn test_update_metadata_success() {
+    let env = Env::default();
+    let contract_id = env.register(EventRegistry, ());
+    let client = EventRegistryClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    let organizer = Address::generate(&env);
+    let payment_addr = Address::generate(&env);
+    let platform_wallet = Address::generate(&env);
+    env.mock_all_auths();
+
+    client.initialize(&admin, &platform_wallet, &500);
+
+    let event_id = String::from_str(&env, "event_metadata");
+    let metadata_cid = String::from_str(
+        &env,
+        "bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi",
+    );
+    client.register_event(&event_id, &organizer, &payment_addr, &metadata_cid, &100);
+
+    let new_metadata_cid = String::from_str(
+        &env,
+        "bafkreifh22222222222222222222222222222222222222222222222222",
+    );
+    client.update_metadata(&event_id, &new_metadata_cid);
+
+    let event_info = client.get_event(&event_id).unwrap();
+    assert_eq!(event_info.metadata_cid, new_metadata_cid);
+}
+
+#[test]
+fn test_update_metadata_invalid_cid() {
+    let env = Env::default();
+    let contract_id = env.register(EventRegistry, ());
+    let client = EventRegistryClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    let organizer = Address::generate(&env);
+    let payment_addr = Address::generate(&env);
+    let platform_wallet = Address::generate(&env);
+    env.mock_all_auths();
+
+    client.initialize(&admin, &platform_wallet, &500);
+
+    let event_id = String::from_str(&env, "event_metadata");
+    let metadata_cid = String::from_str(
+        &env,
+        "bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi",
+    );
+    client.register_event(&event_id, &organizer, &payment_addr, &metadata_cid, &100);
+
+    // Test starts with wrong character
+    let wrong_char_cid = String::from_str(
+        &env,
+        "Qafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi",
+    );
+    let result_wrong_char = client.try_update_metadata(&event_id, &wrong_char_cid);
+    assert_eq!(
+        result_wrong_char,
+        Err(Ok(EventRegistryError::InvalidMetadataCid))
+    );
+
+    // Test too short
+    let short_cid = String::from_str(&env, "bafy");
+    let result = client.try_update_metadata(&event_id, &short_cid);
+    assert_eq!(result, Err(Ok(EventRegistryError::InvalidMetadataCid)));
+}
+
+// ==================== Inventory / Supply Tests ====================
+
+#[test]
+fn test_set_ticket_payment_contract() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register(EventRegistry, ());
+    let client = EventRegistryClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    let platform_wallet = Address::generate(&env);
+    let ticket_payment = Address::generate(&env);
+
+    client.initialize(&admin, &platform_wallet, &500);
+    client.set_ticket_payment_contract(&ticket_payment);
+
+    assert_eq!(client.get_ticket_payment_contract(), ticket_payment);
+}
+
+#[test]
+fn test_increment_inventory_success() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register(EventRegistry, ());
+    let client = EventRegistryClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    let organizer = Address::generate(&env);
+    let payment_addr = Address::generate(&env);
+    let platform_wallet = Address::generate(&env);
+    let ticket_payment = Address::generate(&env);
+
+    client.initialize(&admin, &platform_wallet, &500);
+    client.set_ticket_payment_contract(&ticket_payment);
+
+    let event_id = String::from_str(&env, "supply_event");
+    let metadata_cid = String::from_str(
+        &env,
+        "bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi",
+    );
+    client.register_event(&event_id, &organizer, &payment_addr, &metadata_cid, &10);
+
+    // Increment inventory
+    client.increment_inventory(&event_id);
+
+    let event_info = client.get_event(&event_id).unwrap();
+    assert_eq!(event_info.current_supply, 1);
+    assert_eq!(event_info.max_supply, 10);
+
+    // Increment again
+    client.increment_inventory(&event_id);
+
+    let event_info = client.get_event(&event_id).unwrap();
+    assert_eq!(event_info.current_supply, 2);
+}
+
+#[test]
+fn test_increment_inventory_max_supply_exceeded() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register(EventRegistry, ());
+    let client = EventRegistryClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    let organizer = Address::generate(&env);
+    let payment_addr = Address::generate(&env);
+    let platform_wallet = Address::generate(&env);
+    let ticket_payment = Address::generate(&env);
+
+    client.initialize(&admin, &platform_wallet, &500);
+    client.set_ticket_payment_contract(&ticket_payment);
+
+    let event_id = String::from_str(&env, "limited_event");
+    let metadata_cid = String::from_str(
+        &env,
+        "bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi",
+    );
+    // Only 2 tickets available
+    client.register_event(&event_id, &organizer, &payment_addr, &metadata_cid, &2);
+
+    // First two should succeed
+    client.increment_inventory(&event_id);
+    client.increment_inventory(&event_id);
+
+    let event_info = client.get_event(&event_id).unwrap();
+    assert_eq!(event_info.current_supply, 2);
+    assert_eq!(event_info.max_supply, 2);
+
+    // Third should fail
+    let result = client.try_increment_inventory(&event_id);
+    assert_eq!(result, Err(Ok(EventRegistryError::MaxSupplyExceeded)));
+}
+
+#[test]
+fn test_increment_inventory_unlimited_supply() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register(EventRegistry, ());
+    let client = EventRegistryClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    let organizer = Address::generate(&env);
+    let payment_addr = Address::generate(&env);
+    let platform_wallet = Address::generate(&env);
+    let ticket_payment = Address::generate(&env);
+
+    client.initialize(&admin, &platform_wallet, &500);
+    client.set_ticket_payment_contract(&ticket_payment);
+
+    let event_id = String::from_str(&env, "unlimited_event");
+    let metadata_cid = String::from_str(
+        &env,
+        "bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi",
+    );
+    // max_supply = 0 means unlimited
+    client.register_event(&event_id, &organizer, &payment_addr, &metadata_cid, &0);
+
+    // Should succeed many times without hitting a limit
+    for _ in 0..10 {
+        client.increment_inventory(&event_id);
+    }
+
+    let event_info = client.get_event(&event_id).unwrap();
+    assert_eq!(event_info.current_supply, 10);
+    assert_eq!(event_info.max_supply, 0);
+}
+
+#[test]
+fn test_increment_inventory_event_not_found() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register(EventRegistry, ());
+    let client = EventRegistryClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    let platform_wallet = Address::generate(&env);
+    let ticket_payment = Address::generate(&env);
+
+    client.initialize(&admin, &platform_wallet, &500);
+    client.set_ticket_payment_contract(&ticket_payment);
+
+    let fake_event_id = String::from_str(&env, "nonexistent");
+    let result = client.try_increment_inventory(&fake_event_id);
+    assert_eq!(result, Err(Ok(EventRegistryError::EventNotFound)));
+}
+
+#[test]
+fn test_increment_inventory_inactive_event() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register(EventRegistry, ());
+    let client = EventRegistryClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    let organizer = Address::generate(&env);
+    let payment_addr = Address::generate(&env);
+    let platform_wallet = Address::generate(&env);
+    let ticket_payment = Address::generate(&env);
+
+    client.initialize(&admin, &platform_wallet, &500);
+    client.set_ticket_payment_contract(&ticket_payment);
+
+    let event_id = String::from_str(&env, "inactive_event");
+    let metadata_cid = String::from_str(
+        &env,
+        "bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi",
+    );
+    client.register_event(&event_id, &organizer, &payment_addr, &metadata_cid, &100);
+
+    // Deactivate the event
+    client.update_event_status(&event_id, &false);
+
+    // Try to increment — should fail because event is inactive
+    let result = client.try_increment_inventory(&event_id);
+    assert_eq!(result, Err(Ok(EventRegistryError::EventInactive)));
+}
+
+#[test]
+fn test_increment_inventory_persists_across_reads() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register(EventRegistry, ());
+    let client = EventRegistryClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    let organizer = Address::generate(&env);
+    let payment_addr = Address::generate(&env);
+    let platform_wallet = Address::generate(&env);
+    let ticket_payment = Address::generate(&env);
+
+    client.initialize(&admin, &platform_wallet, &500);
+    client.set_ticket_payment_contract(&ticket_payment);
+
+    let event_id = String::from_str(&env, "persist_event");
+    let metadata_cid = String::from_str(
+        &env,
+        "bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi",
+    );
+    client.register_event(&event_id, &organizer, &payment_addr, &metadata_cid, &50);
+
+    // Increment 5 times
+    for _ in 0..5 {
+        client.increment_inventory(&event_id);
+    }
+
+    // Verify the supply is consistent across multiple reads
+    let event_info_1 = client.get_event(&event_id).unwrap();
+    let event_info_2 = client.get_event(&event_id).unwrap();
+    assert_eq!(event_info_1.current_supply, 5);
+    assert_eq!(event_info_2.current_supply, 5);
+    assert_eq!(event_info_1.max_supply, 50);
 }

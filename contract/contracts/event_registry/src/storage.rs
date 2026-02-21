@@ -11,6 +11,18 @@ pub fn get_admin(env: &Env) -> Option<Address> {
     env.storage().persistent().get(&DataKey::Admin)
 }
 
+/// Sets the platform wallet address of the contract.
+pub fn set_platform_wallet(env: &Env, wallet: &Address) {
+    env.storage()
+        .persistent()
+        .set(&DataKey::PlatformWallet, wallet);
+}
+
+/// Retrieves the platform wallet address of the contract.
+pub fn get_platform_wallet(env: &Env) -> Option<Address> {
+    env.storage().persistent().get(&DataKey::PlatformWallet)
+}
+
 /// Sets the global platform fee.
 pub fn set_platform_fee(env: &Env, fee: u32) {
     env.storage().persistent().set(&DataKey::PlatformFee, &fee);
@@ -27,6 +39,21 @@ pub fn get_platform_fee(env: &Env) -> u32 {
 /// Checks if the platform fee has been set.
 pub fn has_platform_fee(env: &Env) -> bool {
     env.storage().persistent().has(&DataKey::PlatformFee)
+}
+
+/// Sets initialization flag.
+pub fn set_initialized(env: &Env, value: bool) {
+    env.storage()
+        .persistent()
+        .set(&DataKey::Initialized, &value);
+}
+
+/// Checks if contract has been initialized.
+pub fn is_initialized(env: &Env) -> bool {
+    env.storage()
+        .persistent()
+        .get(&DataKey::Initialized)
+        .unwrap_or(false)
 }
 
 /// Stores a new event or updates an existing one.
@@ -76,4 +103,18 @@ pub fn get_organizer_events(env: &Env, organizer: &Address) -> Vec<String> {
         .persistent()
         .get(&DataKey::OrganizerEvents(organizer.clone()))
         .unwrap_or_else(|| Vec::new(env))
+}
+
+/// Sets the authorized TicketPayment contract address.
+pub fn set_ticket_payment_contract(env: &Env, address: &Address) {
+    env.storage()
+        .persistent()
+        .set(&DataKey::TicketPaymentContract, address);
+}
+
+/// Retrieves the authorized TicketPayment contract address.
+pub fn get_ticket_payment_contract(env: &Env) -> Option<Address> {
+    env.storage()
+        .persistent()
+        .get(&DataKey::TicketPaymentContract)
 }

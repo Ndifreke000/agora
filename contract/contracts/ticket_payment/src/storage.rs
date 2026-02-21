@@ -1,6 +1,14 @@
 use crate::types::{DataKey, Payment, PaymentStatus};
 use soroban_sdk::{vec, Address, Env, String, Vec};
 
+pub fn set_admin(env: &Env, admin: &Address) {
+    env.storage().persistent().set(&DataKey::Admin, admin);
+}
+
+pub fn get_admin(env: &Env) -> Option<Address> {
+    env.storage().persistent().get(&DataKey::Admin)
+}
+
 pub fn store_payment(env: &Env, payment: Payment) {
     let key = DataKey::Payment(payment.payment_id.clone());
     env.storage().persistent().set(&key, &payment);
@@ -93,4 +101,36 @@ pub fn get_event_registry(env: &Env) -> Address {
         .persistent()
         .get(&DataKey::EventRegistry)
         .expect("Event registry not set")
+}
+
+pub fn set_initialized(env: &Env, value: bool) {
+    env.storage()
+        .persistent()
+        .set(&DataKey::Initialized, &value);
+}
+
+pub fn is_initialized(env: &Env) -> bool {
+    env.storage()
+        .persistent()
+        .get(&DataKey::Initialized)
+        .unwrap_or(false)
+}
+
+pub fn add_token_to_whitelist(env: &Env, token: &Address) {
+    env.storage()
+        .persistent()
+        .set(&DataKey::TokenWhitelist(token.clone()), &true);
+}
+
+pub fn remove_token_from_whitelist(env: &Env, token: &Address) {
+    env.storage()
+        .persistent()
+        .remove(&DataKey::TokenWhitelist(token.clone()));
+}
+
+pub fn is_token_whitelisted(env: &Env, token: &Address) -> bool {
+    env.storage()
+        .persistent()
+        .get(&DataKey::TokenWhitelist(token.clone()))
+        .unwrap_or(false)
 }
