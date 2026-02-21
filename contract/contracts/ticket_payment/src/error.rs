@@ -15,6 +15,8 @@ pub enum TicketPaymentError {
     InvalidPaymentStatus = 9,
     TicketNotRefundable = 10,
     TierNotFound = 11,
+    InsufficientAllowance = 12,
+    TransferVerificationFailed = 13,
 }
 
 impl core::fmt::Display for TicketPaymentError {
@@ -35,6 +37,12 @@ impl core::fmt::Display for TicketPaymentError {
             }
             TicketPaymentError::TicketNotRefundable => write!(f, "Ticket is not refundable"),
             TicketPaymentError::TierNotFound => write!(f, "Ticket tier not found"),
+            TicketPaymentError::InsufficientAllowance => {
+                write!(f, "Insufficient token allowance")
+            }
+            TicketPaymentError::TransferVerificationFailed => {
+                write!(f, "Transfer verification failed")
+            }
         }
     }
 }

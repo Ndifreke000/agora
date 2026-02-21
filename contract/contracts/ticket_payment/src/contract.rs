@@ -2,7 +2,7 @@ use crate::storage::{
     add_token_to_whitelist, get_admin, get_event_balance, get_event_registry, get_payment,
     get_platform_wallet, is_initialized, is_token_whitelisted, remove_token_from_whitelist,
     set_admin, set_event_registry, set_initialized, set_platform_wallet, set_usdc_token,
-    store_payment, update_event_balance, update_payment_status,
+    store_payment, update_payment_status,
 };
 use crate::types::{Payment, PaymentStatus};
 use crate::{
